@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>02 Morphogenesis · Generative Hours</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧫</text></svg>" />
+  <style>
+    /* Phase 2a — 작품 02 를 혼자 보기 위한 임시 페이지. Phase 3 에서 index.html 의
+       전시실로 흡수되고 이 파일은 사라진다. */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; background: #0a0b0f; }
+    #stage {
+      display: block; width: 100%; height: 100%;
+      background: #0a0b0f;
+      touch-action: none;       /* 없으면 드래그가 그림 대신 페이지를 스크롤한다 */
+      cursor: crosshair;
+      /* 백킹스토어가 격자 크기(약 377x212)라서 브라우저가 늘린다. 기본값 auto 가
+         bilinear 보간이고, 그게 "부드럽게 확대" 다 — 컴포지터가 GPU 에서 무료로 한다. */
+      image-rendering: auto;
+    }
+    .keys {
+      position: fixed; left: 16px; bottom: 14px; z-index: 2;
+      font: 400 11px/1.9 ui-monospace, monospace; letter-spacing: .08em;
+      color: rgba(232,228,218,.42); pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <p class="keys">1 세포분열 · 2 산호 · 3 표범 · 4 미로 · R 재파종 · 드래그로 씨앗 흩뿌리기</p>
+  <script type="module" src="./js/morphogenesis.js"></script>
+</body>
+</html>
