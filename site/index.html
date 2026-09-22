@@ -3,23 +3,140 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>01 Whispering Currents · Generative Hours</title>
+  <title>Generative Hours · Piece 계약 검증</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>" />
   <style>
-    /* Phase 1 — 작품 하나를 전체화면으로 보기 위한 최소 스타일.
-       Phase 3 에서 site/css/style.css 로 옮겨간다. */
+    /* Phase 2b — 리팩터 후 두 작품이 이전과 똑같이 동작하는지 확인하기 위한 임시 하네스.
+       Phase 3 에서 아트리움/갤러리/전시실 3단 구조로 대체된다.
+       캔버스는 이미 하나뿐이고 작품이 그 위에 마운트/언마운트된다. */
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; background: #050507; }
-    #stage {
-      display: block; width: 100%; height: 100%;
-      background: #050507;      /* 첫 프레임 전에도 검정 — 흰 번쩍임 방지 */
-      touch-action: none;       /* 없으면 드래그가 그림 대신 페이지를 스크롤한다 */
-      cursor: crosshair;
-    }
+    html, body { height: 100%; overflow: hidden; background: #0a0b0f; color: #e8e4da;
+                 font: 300 13px/1.6 system-ui, sans-serif; }
+    #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+             background: #0a0b0f; touch-action: none; cursor: crosshair; }
+    .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 3; display: flex; gap: 8px;
+           align-items: center; padding: 10px 14px;
+           background: linear-gradient(to bottom, rgba(10,11,15,.92), rgba(10,11,15,0)); }
+    .bar button { font: 400 11px/1 ui-monospace, monospace; letter-spacing: .14em; color: #9a958a;
+                  background: none; border: 1px solid rgba(232,228,218,.14); border-radius: 3px;
+                  padding: 8px 12px; cursor: pointer; }
+    .bar button[aria-pressed="true"] { color: #e8e4da; border-color: var(--accent, #7cc6ff); }
+    .bar .spacer { flex: 1; }
+    .bar .fps { font: 400 10px/1 ui-monospace, monospace; color: #6d6a63; letter-spacing: .1em; }
+    .panel { position: fixed; left: 14px; bottom: 14px; z-index: 3; max-width: 330px;
+             padding: 14px 16px; border: 1px solid rgba(232,228,218,.14); border-radius: 6px;
+             background: rgba(5,6,10,.66); backdrop-filter: blur(10px); }
+    .panel h2 { font: 500 17px/1.25 Georgia, serif; }
+    .panel p { font-size: 12px; color: #9a958a; margin-top: 6px; }
+    .ctl { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .ctl__label { font: 400 10px/1 ui-monospace, monospace; letter-spacing: .1em; color: #9a958a;
+                  min-width: 108px; }
+    .ctl input[type="range"] { flex: 1; accent-color: var(--accent, #7cc6ff); }
+    .ctl__value { font: 400 10px/1 ui-monospace, monospace; color: #e8e4da; min-width: 30px;
+                  text-align: right; }
+    .ctl--button { font: 400 10px/1 ui-monospace, monospace; letter-spacing: .1em; color: #9a958a;
+                   background: none; border: 1px solid rgba(232,228,218,.14); border-radius: 3px;
+                   padding: 7px 11px; cursor: pointer; width: 100%; margin-top: 10px; }
+    .ctl__choices { display: flex; gap: 4px; flex-wrap: wrap; }
+    .ctl__choice { font: 400 10px/1 ui-monospace, monospace; color: #9a958a; background: none;
+                   border: 1px solid rgba(232,228,218,.14); border-radius: 3px; padding: 6px 8px;
+                   cursor: pointer; }
+    .ctl__choice[aria-pressed="true"] { color: #0a0b0f; background: var(--accent, #7cc6ff);
+                                        border-color: var(--accent, #7cc6ff); }
+    .err { color: #ff9b8a; font-size: 12px; margin-top: 8px; }
   </style>
 </head>
 <body>
   <canvas id="stage"></canvas>
-  <script type="module" src="./js/currents.js"></script>
+
+  <nav class="bar">
+    <button type="button" data-no="01" aria-pressed="false">01 CURRENTS</button>
+    <button type="button" data-no="02" aria-pressed="false">02 MORPHOGENESIS</button>
+    <span class="spacer"></span>
+    <span class="fps" id="fps"></span>
+  </nav>
+
+  <section class="panel">
+    <h2 id="title">—</h2>
+    <p id="note"></p>
+    <div id="controls"></div>
+    <p class="err" id="err" hidden></p>
+  </section>
+
+  <script type="module">
+    // Phase 2b 하네스: 캔버스 하나에 작품을 마운트/언마운트하고, 전환할 때 반드시
+    // 이전 piece.destroy() 를 먼저 부른다. Phase 3 의 main.js 가 이 규율을 이어받는다.
+    import { makeControlHost } from './js/engine.js';
+
+    const WORKS = {
+      '01': { module: './js/pieces/01-currents.js', title: 'Whispering Currents',
+              ko: '속삭이는 해류', accent: '#7cc6ff',
+              note: '벡터장의 각도는 노이즈에서 온다. 마우스를 움직이면 바람이 되고, 길게 누르면 소용돌이가 1.4초에 걸쳐 충전된다.' },
+      '02': { module: './js/pieces/02-morphogenesis.js', title: 'Morphogenesis',
+              ko: '형태발생', accent: '#8fe39a',
+              note: '두 물질이 서로 다른 속도로 번지며 서로를 만든다. 끌면 씨앗이 흩뿌려진다.' },
+    };
+
+    const canvas = document.getElementById('stage');
+    const host = makeControlHost(document.getElementById('controls'));
+    const errEl = document.getElementById('err');
+    let piece = null;
+    let gen = 0;
+
+    async function open(no) {
+      const my = ++gen;
+      const work = WORKS[no];
+      if (!work) return;
+
+      // 규율: 다음 작품을 마운트하기 전에 반드시 이전 것을 destroy 한다. 캔버스는 하나다.
+      if (piece) { piece.destroy(); piece = null; }
+      host.clear();
+      errEl.hidden = true;
+
+      document.documentElement.style.setProperty('--accent', work.accent);
+      document.getElementById('title').textContent = `${no} · ${work.title} / ${work.ko}`;
+      document.getElementById('note').textContent = work.note;
+      for (const b of document.querySelectorAll('.bar button')) {
+        b.setAttribute('aria-pressed', String(b.dataset.no === no));
+      }
+
+      try {
+        const mod = await import(work.module);
+        if (my !== gen) return;        // 로딩 중 다른 작품으로 이동함 — 이 마운트를 포기한다
+        piece = new mod.default();
+        piece.onError = (e) => { errEl.hidden = false; errEl.textContent = `작품 실행 오류: ${e.message}`; };
+        piece.mount(canvas);
+        if (typeof piece.controls === 'function') piece.controls(host);
+      } catch (e) {
+        errEl.hidden = false;
+        errEl.textContent = `작품을 불러오지 못했습니다: ${e.message}`;
+        console.error(e);
+      }
+    }
+
+    for (const b of document.querySelectorAll('.bar button')) {
+      b.addEventListener('click', () => { location.hash = `#work-${b.dataset.no}`; });
+    }
+    const route = () => open((location.hash.match(/work-(\d+)/) || [, '01'])[1]);
+    window.addEventListener('hashchange', route);
+    route();
+
+    const fpsEl = document.getElementById('fps');
+    setInterval(() => {
+      if (!piece) return;
+      fpsEl.textContent = `${piece.frameMs.toFixed(1)} ms · budget ${piece.budgetScale.toFixed(2)}`;
+    }, 400);
+
+    window.__harness = {
+      info: () => piece && ({ w: piece.w, h: piece.h, scale: +piece.scale.toFixed(3),
+                              backing: [canvas.width, canvas.height],
+                              t: +piece.t.toFixed(2), frameMs: +piece.frameMs.toFixed(2),
+                              budgetScale: piece.budgetScale,
+                              n: piece.n, cells: piece.NC, grid: piece.GW && [piece.GW, piece.GH],
+                              vortex: piece.vortex && { ...piece.vortex } }),
+      open,
+      piece: () => piece,
+    };
+  </script>
 </body>
 </html>
