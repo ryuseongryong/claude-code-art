@@ -111,7 +111,10 @@ export default class Morphogenesis extends Piece {
   setup() {
     this.bg = '#0a0b0f';
     this.rnd = makeRng(0x6d2b79f5);
-    this.preset = this.preset ?? 0;
+    // 기본값은 미로(3)다. 격자 8만 칸 상한(성능 예산)에서 1920x1080 은 셀당 5.09 CSS px 라
+    // 확대율이 5배다. 세포분열은 그 배율에서 고립된 점들이 흐릿한 덩어리로 읽히는데,
+    // 미로와 산호는 18~22셀 주기의 연결된 구조라 확대가 유기적인 부드러움으로 읽힌다.
+    this.preset = this.preset ?? 3;
     this.stepsRun = 0;
     // pixelSize() 로 백킹스토어를 정했으므로 this.w/this.h 가 곧 격자 크기다.
     this.GW = this.w; this.GH = this.h;
