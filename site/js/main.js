@@ -625,6 +625,7 @@ window.__gh = {
     error: $('#p-error').hidden ? null : $('#p-error').textContent,
   }),
   startTour, stopTour, step, goToWork,
+  rawPiece: () => piece,          // 디버그: 작품 내부 상태를 직접 들여다볼 때만 쓴다
   hoverCard: (no) => {
     const card = document.querySelector(`.card[data-no="${no}"]`);
     card.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse', bubbles: false }));

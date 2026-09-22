@@ -80,6 +80,17 @@ export const WORKS = [
     year: 2026,
     note: '선은 자기 자신에게서 일정한 간격을 지키려 하고, 자리가 남은 곳마다 두 점 사이로 새 점이 끼어든다. 그래서 길어지고, 갈 곳이 없어지면 접힌다.',
     hint: '커서는 조직이 피해 자라는 돌입니다. 누르고 있으면 그쪽으로 자라고, 클릭하면 새 군체가 생깁니다.',
-    module: null,        // Phase 9 에서 승격된다
+    module: './pieces/04-overgrowth.js',
+  },
+  {
+    no: '05',
+    wing: 'flow',
+    title: 'Standing Waves',
+    ko: '서 있는 파동',
+    medium: 'Canvas 2D · 파동 간섭',
+    year: 2026,
+    note: '두 파동이 만나 서로를 지우거나 키운다. 지워진 자리가 선이 되어 남는다.',
+    hint: '아직 열리지 않았습니다.',
+    module: null,
   },
 ];

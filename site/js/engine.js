@@ -93,6 +93,30 @@ export function makeRng(seed) {
 // ============================================================================
 
 export class Piece {
+  // 진짜 private. `_` 는 관례일 뿐이어서 작품이 같은 이름을 쓰면 엔진이 조용히 오작동한다
+  // (작품 04 가 _reset() 을 정의했더니 mount() 가 setup() 전에 그것을 불러 터졌다).
+  // #private 는 언어 차원에서 섀도잉이 불가능하므로 이 버그 계열이 구조적으로 사라진다.
+  #raf;
+  #lastMs;
+  #dead;
+  #mounted;
+  #ac;
+  #timers;
+  #disposers;
+  #raw;
+  #lastPx;
+  #lastPy;
+  #ewma;
+  #bodyEwma;
+  #minIv;
+  #frames;
+  #throttleMs;
+  #slow;
+  #fast;
+  #lastBudgetAt;
+  #minFrameMs;
+  #cursor;
+
   constructor() {
     // --- 엔진이 채우는 것 ---
     this.canvas = null;
@@ -113,24 +137,24 @@ export class Piece {
     this.budgetScale = 1;
 
     // --- 내부 ---
-    this._raf = 0;
-    this._lastMs = 0;
-    this._dead = false;
-    this._mounted = false;
-    this._ac = null;            // AbortController — 엔진을 거친 모든 리스너
-    this._timers = new Set();
-    this._disposers = [];
-    this._raw = { x: -1e5, y: -1e5, down: false, active: false };
-    this._lastPx = -1e5;
-    this._lastPy = -1e5;
-    this._ewma = 16.7;          // rAF 간격 EWMA (ms) — 거버너가 보는 값
-    this._bodyEwma = 0;         // frame() 본문 시간 EWMA (ms) — 진단용
-    this._minIv = 16.7;         // 관측된 최소 rAF 간격 = vsync 주기의 대리값
-    this._frames = 0;
-    this._throttleMs = 0;       // 프리뷰 스로틀 목표 (ms), 0 이면 없음
-    this._slow = 0;
-    this._fast = 0;
-    this._lastBudgetAt = -1e9;
+    this.#raf = 0;
+    this.#lastMs = 0;
+    this.#dead = false;
+    this.#mounted = false;
+    this.#ac = null;            // AbortController — 엔진을 거친 모든 리스너
+    this.#timers = new Set();
+    this.#disposers = [];
+    this.#raw = { x: -1e5, y: -1e5, down: false, active: false };
+    this.#lastPx = -1e5;
+    this.#lastPy = -1e5;
+    this.#ewma = 16.7;          // rAF 간격 EWMA (ms) — 거버너가 보는 값
+    this.#bodyEwma = 0;         // frame() 본문 시간 EWMA (ms) — 진단용
+    this.#minIv = 16.7;         // 관측된 최소 rAF 간격 = vsync 주기의 대리값
+    this.#frames = 0;
+    this.#throttleMs = 0;       // 프리뷰 스로틀 목표 (ms), 0 이면 없음
+    this.#slow = 0;
+    this.#fast = 0;
+    this.#lastBudgetAt = -1e9;
     this.onError = null;        // main.js 가 꽂는다 — 플래카드에 사유를 쓰기 위해
   }
 
@@ -141,70 +165,70 @@ export class Piece {
    * @param {{budgetScale?: number, fps?: number}} [opts]
    */
   mount(canvas, opts = {}) {
-    if (this._mounted) return this;
-    this._mounted = true;
+    if (this.#mounted) return this;
+    this.#mounted = true;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     if (opts.budgetScale) this.budgetScale = opts.budgetScale;
     // 프리뷰는 60fps 를 낼 필요가 없다. 스로틀을 걸면 거버너의 기준도 같이 올려야 한다 —
     // 안 그러면 20fps 로 의도적으로 제한한 프리뷰가 "느리다" 고 판정되어 끝없이 감쇠한다.
-    this._minFrameMs = opts.fps ? 1000 / opts.fps : 0;
-    this._throttleMs = this._minFrameMs;
-    this._ewma = this._minFrameMs || 16.7;
-    this._minIv = this._ewma;
-    this._frames = 0;
+    this.#minFrameMs = opts.fps ? 1000 / opts.fps : 0;
+    this.#throttleMs = this.#minFrameMs;
+    this.#ewma = this.#minFrameMs || 16.7;
+    this.#minIv = this.#ewma;
+    this.#frames = 0;
 
-    this._ac = new AbortController();
-    const signal = this._ac.signal;
+    this.#ac = new AbortController();
+    const signal = this.#ac.signal;
     const c = canvas;
 
     // 포인터: 이벤트는 원시 상태만 기록하고 프레임 경계에서 한 번 스냅샷한다.
     // 한 프레임에 pointermove 가 여러 번 오면 속도가 왜곡되기 때문이다.
     const at = (e) => {
       const r = c.getBoundingClientRect();
-      this._raw.x = e.clientX - r.left;
-      this._raw.y = e.clientY - r.top;
+      this.#raw.x = e.clientX - r.left;
+      this.#raw.y = e.clientY - r.top;
     };
     c.addEventListener('pointerdown', (e) => {
       at(e);
-      this._raw.down = true;
-      this._raw.active = true;
+      this.#raw.down = true;
+      this.#raw.active = true;
       // 터치 탭은 pointermove 를 전혀 만들지 않으므로(실측) active 를 down 과 함께 켠다.
       try { c.setPointerCapture(e.pointerId); } catch { /* 캡처 불가 — 무해 */ }
-      this._call('onPointerDown');
+      this.#call('onPointerDown');
     }, { signal });
-    c.addEventListener('pointermove', (e) => { at(e); this._raw.active = true; }, { signal });
+    c.addEventListener('pointermove', (e) => { at(e); this.#raw.active = true; }, { signal });
     c.addEventListener('pointerup', (e) => {
       at(e);
-      this._raw.down = false;
-      if (e.pointerType === 'touch') this._raw.active = false;
-      this._call('onPointerUp');
+      this.#raw.down = false;
+      if (e.pointerType === 'touch') this.#raw.active = false;
+      this.#call('onPointerUp');
     }, { signal });
     c.addEventListener('pointercancel', () => {
-      this._raw.down = false; this._raw.active = false;
-      this._call('onPointerUp');
+      this.#raw.down = false; this.#raw.active = false;
+      this.#call('onPointerUp');
     }, { signal });
-    c.addEventListener('pointerleave', () => { this._raw.active = false; }, { signal });
-    c.addEventListener('pointerenter', () => { this._raw.active = true; }, { signal });
+    c.addEventListener('pointerleave', () => { this.#raw.active = false; }, { signal });
+    c.addEventListener('pointerenter', () => { this.#raw.active = true; }, { signal });
 
     // 리사이즈: ResizeObserver 가 window.resize 보다 정확하다(요소가 레이아웃으로 바뀔 때도 잡는다).
     if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver(() => this._resize());
+      const ro = new ResizeObserver(() => this.#resize());
       ro.observe(c);
-      this._disposers.push(() => ro.disconnect());
+      this.#disposers.push(() => ro.disconnect());
     } else {
-      this.on(c.ownerDocument.defaultView, 'resize', () => this._resize());
+      this.on(c.ownerDocument.defaultView, 'resize', () => this.#resize());
     }
 
-    this._resize();          // setup() 전에 w/h 와 백킹스토어를 확정한다
-    this._reset();           // 컨텍스트 상태를 알려진 값으로
-    this._clear();           // 이전 작품의 픽셀을 지운다 — 작품에 맡기지 않는다
+    this.#resize();          // setup() 전에 w/h 와 백킹스토어를 확정한다
+    this.#resetCtx();           // 컨텍스트 상태를 알려진 값으로
+    this.#clear();           // 이전 작품의 픽셀을 지운다 — 작품에 맡기지 않는다
     this.setup();
-    this._paintBg();         // setup 마지막에 한 번 — 첫 프레임 흰 번쩍임 방지
-    this._reset();
+    this.#paintBg();         // setup 마지막에 한 번 — 첫 프레임 흰 번쩍임 방지
+    this.#resetCtx();
 
-    this._lastMs = performance.now();
-    this._raf = requestAnimationFrame(this._tick);
+    this.#lastMs = performance.now();
+    this.#raf = requestAnimationFrame(this.#tick);
     return this;
   }
 
@@ -212,39 +236,39 @@ export class Piece {
    * 작품이 재정의하지 않는다. 멱등이고, 작품의 teardown() 이 던져도 나머지 정리가 끝난다.
    */
   destroy() {
-    if (this._dead) return;
-    this._dead = true;
-    if (this._raf) cancelAnimationFrame(this._raf);
-    this._raf = 0;
-    if (this._ac) this._ac.abort();          // 엔진을 거친 모든 리스너가 사라진다
-    for (const id of this._timers) clearTimeout(id);
-    this._timers.clear();
-    for (const d of this._disposers) { try { d(); } catch (e) { report(e); } }
-    this._disposers.length = 0;
-    try { this._call('teardown'); } catch (e) { report(e); }
-    if (this.ctx) { this._reset(); this._clear(); }
+    if (this.#dead) return;
+    this.#dead = true;
+    if (this.#raf) cancelAnimationFrame(this.#raf);
+    this.#raf = 0;
+    if (this.#ac) this.#ac.abort();          // 엔진을 거친 모든 리스너가 사라진다
+    for (const id of this.#timers) clearTimeout(id);
+    this.#timers.clear();
+    for (const d of this.#disposers) { try { d(); } catch (e) { report(e); } }
+    this.#disposers.length = 0;
+    try { this.#call('teardown'); } catch (e) { report(e); }
+    if (this.ctx) { this.#resetCtx(); this.#clear(); }
     this.canvas = null;
     this.ctx = null;
-    this._mounted = false;
+    this.#mounted = false;
   }
 
   // ------------------------------------------------------- 작품이 쓰는 엔진 API
 
   /** 리스너를 엔진의 AbortController 에 매어 등록한다. destroy() 가 전부 떼어낸다. */
   on(target, type, fn, opts) {
-    if (!this._ac) return;
-    target.addEventListener(type, fn, { ...(opts || {}), signal: this._ac.signal });
+    if (!this.#ac) return;
+    target.addEventListener(type, fn, { ...(opts || {}), signal: this.#ac.signal });
   }
 
   /** destroy() 가 자동으로 지우는 setTimeout. */
   later(fn, ms) {
-    const id = setTimeout(() => { this._timers.delete(id); fn(); }, ms);
-    this._timers.add(id);
+    const id = setTimeout(() => { this.#timers.delete(id); fn(); }, ms);
+    this.#timers.add(id);
     return id;
   }
 
   /** destroy() 시 호출될 정리 함수를 등록한다. */
-  onDispose(fn) { this._disposers.push(fn); }
+  onDispose(fn) { this.#disposers.push(fn); }
 
   /**
    * rAF 간격 EWMA (ms). 자동 감쇠가 보는 값이다.
@@ -253,10 +277,17 @@ export class Piece {
    * 전혀 포함하지 않는다. 실측: 작품 01 이 rAF 간격 66.7ms 일 때 본문은 5.26ms 로 나왔다
    * — 래스터화가 프레임의 94% 인데 거버너에는 보이지 않았다.
    */
-  get frameMs() { return this._ewma; }
+  get frameMs() { return this.#ewma; }
 
   /** frame() 본문만의 시간 EWMA (ms). 진단용 — 래스터화는 포함되지 않는다. */
-  get bodyMs() { return this._bodyEwma; }
+  get bodyMs() { return this.#bodyEwma; }
+
+  // --- 진단용 getter. 내부는 #private 이므로 밖에서 읽을 통로를 명시적으로 둔다. ---
+  get dead() { return this.#dead; }
+  get liveRaf() { return this.#raf; }
+  get minInterval() { return this.#minIv; }
+  get pendingTimers() { return this.#timers.size; }
+  get pendingDisposers() { return this.#disposers.length; }
 
   // --------------------------------------------------------- 작품이 구현하는 것
 
@@ -267,14 +298,14 @@ export class Piece {
 
   // --------------------------------------------------------------------- 내부
 
-  _call(name, ...args) {
+  #call(name, ...args) {
     const fn = this[name];
     if (typeof fn === 'function') return fn.apply(this, args);
     return undefined;
   }
 
   /** 컨텍스트 상태를 알려진 값으로 되돌린다. 한 작품이 다음 작품을 오염시키지 못하게. */
-  _reset() {
+  #resetCtx() {
     const g = this.ctx;
     if (!g) return;
     g.globalCompositeOperation = 'source-over';
@@ -289,7 +320,7 @@ export class Piece {
    * 작품 02 에서 01 로 넘어가면 반응-확산 무늬가 잔존율 0.934^n 로 남는다
    * (실측 250ms 후 35.9%, 1000ms 후 1.66%). 페이드인 내내 보인다.
    */
-  _clear() {
+  #clear() {
     const g = this.ctx;
     if (!g) return;
     g.save();
@@ -298,14 +329,14 @@ export class Piece {
     g.restore();
   }
 
-  _paintBg() {
+  #paintBg() {
     const g = this.ctx;
     if (!g) return;
     g.fillStyle = this.bg || '#050507';
     g.fillRect(0, 0, this.w, this.h);
   }
 
-  _resize() {
+  #resize() {
     const c = this.canvas;
     if (!c) return;
     const rect = c.getBoundingClientRect();
@@ -316,7 +347,7 @@ export class Piece {
 
     // 작품이 백킹스토어 크기를 직접 정할 수 있다. 작품 02 가 이걸 쓴다: 격자 크기로 잡고
     // CSS 가 늘리게 하면 컴포지터가 GPU 에서 bilinear 를 무료로 해준다(0.07ms vs JS 111ms).
-    const want = this._call('pixelSize', cssW, cssH);
+    const want = this.#call('pixelSize', cssW, cssH);
 
     const first = (this.w === 0);
     this.w = cssW; this.h = cssH;
@@ -341,24 +372,24 @@ export class Piece {
       this.cssW = cssW; this.cssH = cssH;
     }
 
-    if (!first) { this._reset(); this._call('onResize'); }
+    if (!first) { this.#resetCtx(); this.#call('onResize'); }
   }
 
-  _snapshotPointer(dt) {
-    const p = this.pointer, r = this._raw;
+  #snapshotPointer(dt) {
+    const p = this.pointer, r = this.#raw;
     // 작품 02 처럼 논리 좌표계가 백킹스토어인 경우 CSS px 를 그 단위로 환산한다.
     const kx = this.cssW ? this.w / this.cssW : 1;
     const ky = this.cssH ? this.h / this.cssH : 1;
     p.x = r.x * kx; p.y = r.y * ky;
     p.active = r.active; p.down = r.down;
 
-    if (this._lastPx > -9e4 && dt > 0) {
-      const rx = (p.x - this._lastPx) / dt;
-      const ry = (p.y - this._lastPy) / dt;
+    if (this.#lastPx > -9e4 && dt > 0) {
+      const rx = (p.x - this.#lastPx) / dt;
+      const ry = (p.y - this.#lastPy) / dt;
       p.vx += (rx - p.vx) * 0.25;            // 저역통과 — 이벤트 단위 지터 제거
       p.vy += (ry - p.vy) * 0.25;
     }
-    this._lastPx = p.x; this._lastPy = p.y;
+    this.#lastPx = p.x; this.#lastPy = p.y;
 
     // 감쇠가 없으면 커서가 멈춘 뒤 마지막 속도가 영구히 남아 바람이 영원히 분다.
     // 0.001^dt 는 약 70ms 반감.
@@ -366,79 +397,79 @@ export class Piece {
     p.vx *= decay; p.vy *= decay;
   }
 
-  _tick = (nowMs) => {
-    if (this._dead) return;
-    this._raf = requestAnimationFrame(this._tick);
+  #tick = (nowMs) => {
+    if (this.#dead) return;
+    this.#raf = requestAnimationFrame(this.#tick);
 
-    const elapsed = (nowMs - this._lastMs) / 1000;
-    if (this._minFrameMs && elapsed * 1000 < this._minFrameMs) return;   // 프리뷰용 스로틀
-    this._lastMs = nowMs;
+    const elapsed = (nowMs - this.#lastMs) / 1000;
+    if (this.#minFrameMs && elapsed * 1000 < this.#minFrameMs) return;   // 프리뷰용 스로틀
+    this.#lastMs = nowMs;
 
     const dt = Math.min(DT_CAP, elapsed);
     this.real = Math.min(REAL_CAP, elapsed);
     this.t += dt;
 
-    this._snapshotPointer(dt);
+    this.#snapshotPointer(dt);
 
     const t0 = performance.now();
     try {
       this.frame(dt, this.t);
     } catch (err) {
       // 작품의 예외로 RAF 가 조용히 죽지 않게. main.js 가 플래카드에 사유를 쓴다.
-      cancelAnimationFrame(this._raf);
-      this._raf = 0;
+      cancelAnimationFrame(this.#raf);
+      this.#raf = 0;
       report(err);
       if (typeof this.onError === 'function') this.onError(err);
       return;
     }
     // 작품이 lighter 를 켜둔 채 반환해도 다음 프레임의 덮기와 다음 작품이 안전하게 시작한다.
-    this._reset();
+    this.#resetCtx();
 
-    this._bodyEwma += (performance.now() - t0 - this._bodyEwma) * 0.1;
+    this.#bodyEwma += (performance.now() - t0 - this.#bodyEwma) * 0.1;
     // 거버너에는 rAF 간격을 준다 — 래스터화와 컴포지트까지 포함된 유일한 정직한 척도다.
     // 첫 프레임과 탭 복귀 프레임의 병적인 간격이 EWMA 를 끌지 않도록 200ms 로 자른다.
-    this._govern(Math.min(200, elapsed * 1000));
+    this.#govern(Math.min(200, elapsed * 1000));
   };
 
   /**
    * 자동 감쇠. "작품 04 가 기존 성능을 깨지 않는다" 를 산문이 아니라 측정으로 만든다.
    * 비용을 면적의 함수로 선언하게 하고, 느려지면 그 함수의 배율만 낮춘다.
    */
-  _govern(ms) {
-    this._ewma += (ms - this._ewma) * 0.1;
+  #govern(ms) {
+    this.#ewma += (ms - this.#ewma) * 0.1;
 
     // 관측된 최소 간격을 vsync 주기의 대리값으로 쓴다.
     // 첫 WARMUP 프레임은 무시한다 — 내비게이션 직후에는 rAF 가 몰려 발사돼 6ms 대 간격이
     // 관측되고(실측 minIv 6.3), 그러면 복구 기준이 7.1ms 로 내려가 60fps 를 내는 작품도
     // 영원히 복구되지 않는다. 그 뒤로는 1.004배/프레임으로 천천히 올라가 조건 변화를 따라간다.
-    if (++this._frames > WARMUP_FRAMES) {
-      this._minIv = Math.max(INTERVAL_FLOOR, Math.min(ms, this._minIv * 1.004));
+    if (++this.#frames > WARMUP_FRAMES) {
+      this.#minIv = Math.max(INTERVAL_FLOOR, Math.min(ms, this.#minIv * 1.004));
     }
 
-    const degradeAt = Math.max(DEGRADE_MS_FLOOR, this._minIv * DEGRADE_MULT, this._throttleMs * 1.3);
-    const restoreAt = Math.max(this._minIv * RESTORE_MULT, this._throttleMs * 1.1);
+    const degradeAt = Math.max(DEGRADE_MS_FLOOR, this.#minIv * DEGRADE_MULT, this.#throttleMs * 1.3);
+    const restoreAt = Math.max(this.#minIv * RESTORE_MULT, this.#throttleMs * 1.1);
 
     // 쿨다운: 느린 기계에서는 60프레임이 4초 넘게 걸리므로 프레임 수만으로는 계단이
     // 촘촘해진다. 벽시계로도 최소 간격을 둬서 관람객이 연속된 조정을 알아채지 못하게 한다.
-    const cool = (this.t * 1000 - this._lastBudgetAt) > BUDGET_COOLDOWN_MS;
+    const cool = (this.t * 1000 - this.#lastBudgetAt) > BUDGET_COOLDOWN_MS;
 
-    if (this._ewma > degradeAt) {
-      this._fast = 0;
-      if (++this._slow >= DEGRADE_FRAMES && cool && this.budgetScale > BUDGET_MIN) {
-        this._slow = 0;
-        this._lastBudgetAt = this.t * 1000;
+    if (this.#ewma > degradeAt) {
+      this.#fast = 0;
+      if (++this.#slow >= DEGRADE_FRAMES && cool && this.budgetScale > BUDGET_MIN) {
+        this.#slow = 0;
+        this.#lastBudgetAt = this.t * 1000;
         this.budgetScale = Math.max(BUDGET_MIN, this.budgetScale * 0.8);
-        this._reconfigure();
+        this.#reconfigure();
       }
-    } else if (this._ewma < restoreAt) {
-      this._slow = 0;
-      if (++this._fast >= RESTORE_FRAMES && cool && this.budgetScale < 1) {
-        this._fast = 0;
-        this._lastBudgetAt = this.t * 1000;
+    } else if (this.#ewma < restoreAt) {
+      this.#slow = 0;
+      if (++this.#fast >= RESTORE_FRAMES && cool && this.budgetScale < 1) {
+        this.#fast = 0;
+        this.#lastBudgetAt = this.t * 1000;
         this.budgetScale = Math.min(1, this.budgetScale / 0.8);
-        this._reconfigure();
+        this.#reconfigure();
       }
-    } else { this._slow = 0; this._fast = 0; }   // 이력 구간 — 아무것도 하지 않는다
+    } else { this.#slow = 0; this.#fast = 0; }   // 이력 구간 — 아무것도 하지 않는다
   }
 
   /**
@@ -453,10 +484,10 @@ export class Piece {
    * 21초에 7번 감쇠가 일어나며 그때마다 캔버스가 지워지고 노이즈 순열까지 재생성돼
    * 작품이 계속 리셋됐다(최종 ink 0.02%). 전시장에서는 허용될 수 없다.
    */
-  _reconfigure() {
-    this._resize();
-    this._reset();
-    this._ewma = this._minIv;   // 새 구성을 기준으로 다시 잰다
+  #reconfigure() {
+    this.#resize();
+    this.#resetCtx();
+    this.#ewma = this.#minIv;   // 새 구성을 기준으로 다시 잰다
   }
 }
 
