@@ -69,7 +69,7 @@ export const WORKS = [
     year: 2026,
     note: '보이지 않는 인력점 몇 개가 궤도를 정한다. 색은 궤도 반지름이 결정하고, 반지름이 바뀌면 색도 바뀐다.',
     hint: '커서를 가까이 가져가면 흩어지고, 멀어지면 서서히 궤도로 돌아옵니다.',
-    module: null,        // Phase 5 에서 승격된다
+    module: './pieces/03-gravity.js',
   },
   {
     no: '04',

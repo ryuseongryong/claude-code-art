@@ -42,7 +42,9 @@ export const MAX_DIM = 4096;      // 여러 모바일 GPU 가 이 위의 캔버�
 // 자동 감쇠. 기준은 절대 ms 가 아니라 "관측된 최소 rAF 간격"(= 화면의 vsync 주기)의 배수다.
 // 절대값으로 하면 60Hz 에서 여유롭게 60fps 를 내는 작품도 간격이 정확히 16.7ms 로 나와
 // 복구 조건(<5ms)을 영원히 만족하지 못한다 — 한 번 감쇠하면 다시 못 올라간다.
-const DEGRADE_MULT = 1.35;      // 최소 간격의 1.35배를 넘으면 느린 것 (60Hz -> 22.5ms)
+const DEGRADE_MULT = 1.5;       // 최소 간격의 1.5배를 넘으면 느린 것 (60Hz -> 25ms).
+                                // 1.35 는 과민했다 — 열 프레임에 한 번 떨어지는 작품도
+                                // EWMA 24ms 가 되어 불필요하게 감쇠했다(작품 03 실측).
 const RESTORE_MULT = 1.12;      // 1.12배 미만이면 매 프레임 vsync 를 맞히는 것 (-> 18.7ms)
 const DEGRADE_MS_FLOOR = 20;    // 아주 빠른 화면(165Hz)에서 과민해지지 않게
 const DEGRADE_FRAMES = 60;
