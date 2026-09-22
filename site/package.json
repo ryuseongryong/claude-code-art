@@ -1,0 +1,4 @@
+{
+  "//": "ESM 범위를 site/ 로 한정한다. 루트 package.json 에 \"type\":\"module\" 을 넣으면 tsc(TS2835)·jest(jest.config.js 가 CommonJS)·cdk synth 가 모두 깨진다. 이 파일이 있으면 node verify.mjs 가 site/js/**/*.js 를 경고 없이 ESM 으로 읽는다.",
+  "type": "module"
+}

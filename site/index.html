@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Generative Hours — 코드가 스스로 그리는 제너러티브 아트 전시. 모든 화면은 실시간으로 생성되며 당신의 손끝에 반응합니다." />
+  <title>Generative Hours · 코드가 그리는 시간</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Noto Sans KR 이 없으면 한글이 빈칸으로 렌더된다. Cormorant Garamond / Inter /
+       Space Mono 는 셋 다 한글 글리프가 없어서, 한글 폰트가 없는 키오스크에서는 설명이
+       전부 사라진다(headless Chromium 에서 실제로 그렇게 나왔다). -->
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500&family=Space+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+
+<body data-view="atrium">
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <button class="brand" type="button" data-action="home" aria-label="아트리움으로">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__text">GENERATIVE&nbsp;HOURS</span>
+    </button>
+    <nav class="topnav" id="topnav" aria-label="전시관"><!-- JS 가 채운다 --></nav>
+    <button class="playbtn" type="button" data-action="tour" aria-pressed="false"
+            title="자동 관람 (P)">
+      <span class="playbtn__icon" aria-hidden="true"></span>
+      <span class="playbtn__text">자동 관람</span>
+    </button>
+  </header>
+
+  <!-- ─────────────────────────── 아트리움 ─────────────────────────── -->
+  <main class="atrium" id="atrium">
+    <section class="hero">
+      <p class="hero__eyebrow">인터랙티브 제너러티브 미디어 아트 전시</p>
+      <h1 class="hero__title">Generative<br />Hours</h1>
+      <p class="hero__lead">
+        여기 걸린 것은 그림이 아니라 규칙입니다. 노이즈에서 각도를 읽은 벡터장, 서로를 만드는
+        두 물질, 보이지 않는 인력점을 공전하는 입자들 — 같은 규칙이 매번 다른 화면을 그립니다.
+        어떤 프레임도 저장되어 있지 않고, 모든 화면은 당신이 보는 순간에 계산됩니다.
+      </p>
+      <div class="hero__meta">
+        <span id="meta-works">— WORKS</span><i></i>
+        <span id="meta-wings">— WINGS</span><i></i>
+        <span>INTERACTIVE</span>
+      </div>
+      <button class="hero__enter" type="button" data-action="enter">전시 입장</button>
+    </section>
+    <footer class="colophon">
+      <p>모든 작품은 외부 라이브러리 없이 캔버스 2D 와 ES 모듈만으로 실시간 생성됩니다</p>
+      <p class="colophon__credit">GENERATIVE HOURS · 2026</p>
+    </footer>
+  </main>
+
+  <!-- ─────────────────────────── 갤러리 ─────────────────────────── -->
+  <section class="gallery" id="gallery" aria-label="작품 목록">
+    <div class="gallery__inner">
+      <h2 class="gallery__title">전시관</h2>
+      <div id="wings"><!-- JS 가 전시관 섹션과 카드를 한 번만 빌드한다 --></div>
+      <p class="gallery__hint">
+        카드를 누르면 전시실로 들어갑니다 · <kbd>P</kbd> 자동 관람 · <kbd>Esc</kbd> 나가기
+      </p>
+    </div>
+    <!-- 호버 프리뷰는 카드마다가 아니라 이 캔버스 하나를 호버된 카드로 옮겨 쓴다.
+         카드당 캔버스 오버헤드는 무시할 수준이지만(M=16 에서 0.035ms/캔버스) 비용은
+         작품 사본 N개라서, 사본을 하나로 묶는 것이 요점이다. -->
+    <canvas class="preview" id="preview" aria-hidden="true"></canvas>
+    <p class="live" id="live" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- ─────────────────────────── 전시실 ─────────────────────────── -->
+  <section class="room" id="room" aria-label="전시실">
+    <!-- 전시실의 캔버스는 단 하나이고 작품이 그 위에 마운트/언마운트된다. -->
+    <canvas id="stage" role="img" aria-label=""></canvas>
+
+    <div class="room__chrome">
+      <button class="room__exit" type="button" data-action="exit" aria-label="전시관으로 돌아가기">✕</button>
+
+      <aside class="placard" id="placard">
+        <p class="placard__no"><span id="p-no"></span> · <span id="p-wing"></span></p>
+        <h2 class="placard__title" id="p-title"></h2>
+        <p class="placard__ko" id="p-ko"></p>
+        <p class="placard__medium" id="p-medium"></p>
+        <p class="placard__note" id="p-note"></p>
+        <div class="placard__controls" id="p-controls"></div>
+        <p class="placard__error" id="p-error" hidden></p>
+      </aside>
+
+      <!-- 도슨트 캡션: 입장 3초 후 스르륵 나타나고, 마우스가 움직이면 잠시 숨는다. -->
+      <div class="caption" id="caption" data-state="hidden" aria-hidden="true">
+        <span class="caption__no" id="c-no"></span>
+        <span class="caption__title" id="c-title"></span>
+        <span class="caption__rule" id="c-rule"></span>
+        <span class="caption__hint" id="c-hint"></span>
+      </div>
+
+      <div class="actionbar">
+        <button class="actionbar__btn" type="button" data-action="prev" aria-label="이전 작품">‹ 이전</button>
+        <span class="actionbar__where" id="a-where"></span>
+        <button class="actionbar__btn" type="button" data-action="next" aria-label="다음 작품">다음 ›</button>
+      </div>
+
+      <div class="tourbar" id="tourbar" hidden>
+        <span class="tourbar__dot" aria-hidden="true"></span>
+        <span>자동 관람 중 — 아무 조작이나 하면 해제됩니다</span>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
