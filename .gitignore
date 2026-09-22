@@ -1,5 +1,12 @@
 *.js
 !jest.config.js
+
+# 전시 사이트는 소스가 .js 다 — 위의 *.js 에 삼켜지면 안 된다.
+# 재귀형(**)이 필수: !site/js/*.js 는 site/js/pieces/*.js 를 되살리지 못하고,
+# 그 실패는 로컬에서 보이지 않는다(파일이 디스크에 있으니 verify.mjs 도 CDK 도 통과한다).
+# 깨지는 건 남의 빈 클론뿐이다. 검증: git check-ignore -v site/js/*.js site/js/pieces/*.js
+!site/js/**/*.js
+
 *.d.ts
 node_modules
 
